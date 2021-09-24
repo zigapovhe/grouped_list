@@ -23,6 +23,11 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// elements, those two belong to the same group.
   final E Function(T element) groupBy;
 
+
+  /// Prioritize specific group and move it to the first place
+  /// The selected group will always be first, no matter of sort and groupComparator functions
+  final T? prioritizedGroup;
+
   /// Can be used to define a custom sorting for the groups.
   ///
   /// If not set groups will be sorted with their natural sorting order or their
@@ -184,6 +189,7 @@ class GroupedListView<T, E> extends StatefulWidget {
     Key? key,
     required this.elements,
     required this.groupBy,
+    this.prioritizedGroup,
     this.groupComparator,
     this.groupSeparatorBuilder,
     this.groupHeaderBuilder,
@@ -391,6 +397,10 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
       });
       if (widget.order == GroupedListOrder.DESC) {
         elements = elements.reversed.toList();
+      }
+      if(widget.prioritizedGroup != null){
+        elements.remove(widget.prioritizedGroup!);
+        elements.insert(0, widget.prioritizedGroup!);
       }
     }
     return elements;
