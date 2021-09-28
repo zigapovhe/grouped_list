@@ -34,6 +34,12 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// specific [Comparable] implementation.
   final int Function(E value1, E value2)? groupComparator;
 
+  /// Can be used to define a custom sorting for the groups.
+  ///
+  /// If not set groups will be sorted with their natural sorting order or their
+  /// specific [Comparable] implementation.
+  final int Function(T element1, T element2)? groupSorting;
+
   /// Can be used to define a custom sorting for the elements inside each group.
   ///
   /// If not set elements will be sorted with their natural sorting order or
@@ -191,6 +197,7 @@ class GroupedListView<T, E> extends StatefulWidget {
     required this.groupBy,
     this.prioritizeGroup,
     this.groupComparator,
+    this.groupSorting,
     this.groupSeparatorBuilder,
     this.groupHeaderBuilder,
     this.itemBuilder,
@@ -384,6 +391,9 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
         } else if (widget.groupBy(e1) is Comparable) {
           compareResult = (widget.groupBy(e1) as Comparable)
               .compareTo(widget.groupBy(e2) as Comparable);
+          if(widget.groupSorting != null){
+            compareResult = widget.groupSorting!(e1,e2);
+          }
         }
         // compare elements inside group
         if ((compareResult == null || compareResult == 0)) {
