@@ -13,6 +13,8 @@ export 'src/GroupedListOrder.dart';
 /// items can be sectioned into groups.
 ///
 /// See [ListView.builder]
+///
+@immutable
 class GroupedListView<T, E> extends StatefulWidget {
   /// Items of which [itemBuilder] or [indexedItemBuilder] produce the list.
   final List<T> elements;
@@ -191,7 +193,7 @@ class GroupedListView<T, E> extends StatefulWidget {
   final double? itemExtent;
 
   /// Creates a [GroupedListView]
-  GroupedListView({
+  const GroupedListView({
     Key? key,
     required this.elements,
     required this.groupBy,
@@ -245,6 +247,12 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
   RenderBox? _headerBox;
   RenderBox? _listBox;
 
+  /// Fix for backwards compatability
+  ///
+  /// See:
+  /// * https://docs.flutter.dev/development/tools/sdk/release-notes/release-notes-3.0.0#your-code
+  I? _ambiguate<I>(I? value) => value;
+
   @override
   void initState() {
     _controller = widget.controller ?? ScrollController();
@@ -270,11 +278,11 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
   Widget build(BuildContext context) {
     _sortedElements = _sortElements();
     var hiddenIndex = widget.reverse ? _sortedElements.length * 2 - 1 : 0;
-    var _isSeparator =
+    var isSeparator =
         widget.reverse ? (int i) => i.isOdd : (int i) => i.isEven;
 
     if (widget.reverse) {
-      WidgetsBinding.instance!.addPostFrameCallback((_) {
+      _ambiguate(WidgetsBinding.instance)!.addPostFrameCallback((_) {
         _scrollListener();
       });
     }
@@ -311,7 +319,7 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
                 child: _buildGroupSeparator(_sortedElements[actualIndex]),
               );
             }
-            if (_isSeparator(index)) {
+            if (isSeparator(index)) {
               var curr = widget.groupBy(_sortedElements[actualIndex]);
               var prev = widget.groupBy(
                   _sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
@@ -336,15 +344,15 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
     );
   }
 
-  Container _buildItem(context, int actualIndex) {
-    var key = GlobalKey();
-    _keys['$actualIndex'] = key;
-    return Container(
-        key: key,
-        child: widget.indexedItemBuilder == null
-            ? widget.itemBuilder!(context, _sortedElements[actualIndex])
-            : widget.indexedItemBuilder!(
-                context, _sortedElements[actualIndex], actualIndex));
+  Widget _buildItem(context, int index) {
+    final key = _keys.putIfAbsent('$index', () => GlobalKey());
+    final value = _sortedElements[index];
+    return KeyedSubtree(
+      key: key,
+      child: widget.indexedItemBuilder != null
+          ? widget.indexedItemBuilder!(context, value, index)
+          : widget.itemBuilder!(context, value),
+    );
   }
 
   void _scrollListener() {
@@ -370,7 +378,13 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
     var index = math.max(int.parse(topItemKey), 0);
     if (index != _topElementIndex) {
       var curr = widget.groupBy(_sortedElements[index]);
-      var prev = widget.groupBy(_sortedElements[_topElementIndex]);
+      E prev;
+
+      try {
+        prev = widget.groupBy(_sortedElements[_topElementIndex]);
+      } on RangeError catch (_) {
+        prev = widget.groupBy(_sortedElements[0]);
+      }
 
       if (prev != curr) {
         _topElementIndex = index;
@@ -380,10 +394,10 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
   }
 
   List<T> _sortElements() {
-    var elements = widget.elements;
+    var elements = [...widget.elements];
     if (widget.sort && elements.isNotEmpty) {
       elements.sort((e1, e2) {
-        var compareResult;
+        int? compareResult;
         // compare groups
         if (widget.groupComparator != null) {
           compareResult =
@@ -396,14 +410,14 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
           }
         }
         // compare elements inside group
-        if ((compareResult == null || compareResult == 0)) {
+        if (compareResult == null || compareResult == 0) {
           if (widget.itemComparator != null) {
             compareResult = widget.itemComparator!(e1, e2);
           } else if (e1 is Comparable) {
             compareResult = e1.compareTo(e2);
           }
         }
-        return compareResult;
+        return compareResult!;
       });
       if (widget.order == GroupedListOrder.DESC) {
         elements = elements.reversed.toList();
@@ -417,7 +431,7 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
 
   Widget _showFixedGroupHeader(int topElementIndex) {
     _groupHeaderKey = GlobalKey();
-    if (widget.useStickyGroupSeparators && widget.elements.isNotEmpty) {
+    if (widget.useStickyGroupSeparators && _sortedElements.isNotEmpty) {
       T topElement;
 
       try {

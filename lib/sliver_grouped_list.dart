@@ -64,7 +64,7 @@ class SliverGroupedListView<T, E> extends StatefulWidget {
   final Widget separator;
 
   /// Creates a [SliverGroupedListView]
-  SliverGroupedListView({
+  const SliverGroupedListView({
     Key? key,
     required this.elements,
     required this.groupBy,
@@ -94,7 +94,7 @@ class _SliverGroupedListViewState<T, E>
   Widget build(BuildContext context) {
     _sortedElements = _sortElements();
     var hiddenIndex = 0;
-    var _isSeparator = (int i) => i.isEven;
+    var isSeparator = (int i) => i.isEven;
 
     return SliverList(
         delegate: SliverChildBuilderDelegate((context, index) {
@@ -105,7 +105,7 @@ class _SliverGroupedListViewState<T, E>
           child: _buildGroupSeparator(_sortedElements[actualIndex]),
         );
       }
-      if (_isSeparator(index)) {
+      if (isSeparator(index)) {
         var curr = widget.groupBy(_sortedElements[actualIndex]);
         var prev = widget.groupBy(_sortedElements[actualIndex - 1]);
         if (prev != curr) {
@@ -129,10 +129,10 @@ class _SliverGroupedListViewState<T, E>
   }
 
   List<T> _sortElements() {
-    var elements = widget.elements;
+    var elements = [...widget.elements];
     if (widget.sort && elements.isNotEmpty) {
       elements.sort((e1, e2) {
-        var compareResult;
+        int? compareResult;
         // compare groups
         if (widget.groupComparator != null) {
           compareResult =
@@ -149,7 +149,7 @@ class _SliverGroupedListViewState<T, E>
             compareResult = e1.compareTo(e2);
           }
         }
-        return compareResult;
+        return compareResult!;
       });
       if (widget.order == GroupedListOrder.DESC) {
         elements = elements.reversed.toList();
