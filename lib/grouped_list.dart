@@ -5,9 +5,9 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-import 'src/GroupedListOrder.dart';
+import 'src/grouped_list_order.dart';
 
-export 'src/GroupedListOrder.dart';
+export 'src/grouped_list_order.dart';
 
 /// A groupable list of widgets similar to [ListView], execpt that the
 /// items can be sectioned into groups.
@@ -19,12 +19,11 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// Items of which [itemBuilder] or [indexedItemBuilder] produce the list.
   final List<T> elements;
 
-  /// Defines which elements are grouped together.
+  /// Defines which [elements] are grouped together.
   ///
   /// Function is called for each element in the list, when equal for two
   /// elements, those two belong to the same group.
   final E Function(T element) groupBy;
-
 
   /// Prioritize specific group and move it to the first place
   /// The selected group will always be first, no matter of sort and groupComparator functions
@@ -42,7 +41,7 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// specific [Comparable] implementation.
   final int Function(T element1, T element2)? groupSorting;
 
-  /// Can be used to define a custom sorting for the elements inside each group.
+  /// Can be used to define a custom sorting for the [elements] inside each group.
   ///
   /// If not set elements will be sorted with their natural sorting order or
   /// their specific [Comparable] implementation.
@@ -61,18 +60,23 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// If defined [groupSeparatorBuilder] wont be used.
   final Widget Function(T element)? groupHeaderBuilder;
 
+  /// This widget is displayed if the list is contains no [elements] and thus is
+  /// empty.
+  ///
+  /// If no defined nothing will be displayed.
+  final Widget? emptyPlaceholder;
+
   /// Called to build children for the list with
   /// 0 <= element < elements.length.
   final Widget Function(BuildContext context, T element)? itemBuilder;
 
   /// Called to build children for the list with
   /// 0 <= element, index < elements.length
-  final Widget Function(BuildContext context, T element, int index)?
-      indexedItemBuilder;
+  final Widget Function(BuildContext context, T element, int index)? indexedItemBuilder;
 
   /// Whether the order of the list is ascending or descending.
   ///
-  /// Defaults to ASC.
+  /// Defaults to [GroupedListOrder.ASC].
   final GroupedListOrder order;
 
   /// Whether the elements will be sorted or not. If not it must be done
@@ -202,6 +206,7 @@ class GroupedListView<T, E> extends StatefulWidget {
     this.groupSorting,
     this.groupSeparatorBuilder,
     this.groupHeaderBuilder,
+    this.emptyPlaceholder,
     this.itemBuilder,
     this.indexedItemBuilder,
     this.itemComparator,
@@ -278,13 +283,38 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
   Widget build(BuildContext context) {
     _sortedElements = _sortElements();
     var hiddenIndex = widget.reverse ? _sortedElements.length * 2 - 1 : 0;
-    var isSeparator =
-        widget.reverse ? (int i) => i.isOdd : (int i) => i.isEven;
+    var isSeparator = widget.reverse ? (int i) => i.isOdd : (int i) => i.isEven;
 
     if (widget.reverse) {
       _ambiguate(WidgetsBinding.instance)!.addPostFrameCallback((_) {
         _scrollListener();
       });
+    }
+
+    /// The itemBuilder function for this package divides the [index] by two
+    /// because between each element a separator is displayed. Depending on the
+    /// direction of the list and if the [index] is even or odd either a item or
+    /// the separator widget is displayed.
+    ///
+    /// If the [index] points to an separator and the previous and next items
+    /// are in different groups, a group header widget is displayed.
+    Widget itemBuilder(context, index) {
+      var actualIndex = index ~/ 2;
+      if (index == hiddenIndex) {
+        return Opacity(
+          opacity: widget.useStickyGroupSeparators ? 0 : 1,
+          child: _buildGroupSeparator(_sortedElements[actualIndex]),
+        );
+      }
+      if (isSeparator(index)) {
+        var curr = widget.groupBy(_sortedElements[actualIndex]);
+        var prev = widget.groupBy(_sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
+        if (prev != curr) {
+          return _buildGroupSeparator(_sortedElements[actualIndex]);
+        }
+        return widget.separator;
+      }
+      return _buildItem(context, actualIndex);
     }
 
     return Stack(
@@ -311,25 +341,7 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
           addRepaintBoundaries: widget.addRepaintBoundaries,
           addSemanticIndexes: widget.addSemanticIndexes,
           cacheExtent: widget.cacheExtent,
-          itemBuilder: (context, index) {
-            var actualIndex = index ~/ 2;
-            if (index == hiddenIndex) {
-              return Opacity(
-                opacity: widget.useStickyGroupSeparators ? 0 : 1,
-                child: _buildGroupSeparator(_sortedElements[actualIndex]),
-              );
-            }
-            if (isSeparator(index)) {
-              var curr = widget.groupBy(_sortedElements[actualIndex]);
-              var prev = widget.groupBy(
-                  _sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
-              if (prev != curr) {
-                return _buildGroupSeparator(_sortedElements[actualIndex]);
-              }
-              return widget.separator;
-            }
-            return _buildItem(context, actualIndex);
-          },
+          itemBuilder: itemBuilder,
         ),
         StreamBuilder<int>(
             stream: _streamController.stream,
@@ -338,12 +350,14 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
               if (snapshot.hasData) {
                 return _showFixedGroupHeader(snapshot.data!);
               }
-              return Container();
+              return const SizedBox.shrink();
             }),
       ],
     );
   }
 
+  /// Returns the widget for element positioned at [index]. The widget is
+  /// retrieved either by [widget.indexedItemBuilder] or [widget.itemBuilder].
   Widget _buildItem(context, int index) {
     final key = _keys.putIfAbsent('$index', () => GlobalKey());
     final value = _sortedElements[index];
@@ -355,11 +369,23 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
     );
   }
 
+  /// This scroll listener is added to the lists controller if
+  /// [widget.useStickyGroupSeparators] is `true`. In that case the scroll
+  /// listener keeps track of the top most element which is still in the view
+  /// and saves the elements index in order to be able to display the
+  /// corresponding groupHeader on top of the view.
+  ///
+  /// If the option [widget.useStickyGroupSeparators] is `false` this listener
+  /// is not required since the group headers are displayed inside the lists and
+  /// do not need to be always in the visible frame.
   void _scrollListener() {
+    if (_sortedElements.isEmpty) {
+      return;
+    }
+
     _listBox ??= _key.currentContext?.findRenderObject() as RenderBox?;
     var listPos = _listBox?.localToGlobal(Offset.zero).dy ?? 0;
-    _headerBox ??=
-        _groupHeaderKey?.currentContext?.findRenderObject() as RenderBox?;
+    _headerBox ??= _groupHeaderKey?.currentContext?.findRenderObject() as RenderBox?;
     var headerHeight = _headerBox?.size.height ?? 0;
     var max = double.negativeInfinity;
     var topItemKey = widget.reverse ? '${_sortedElements.length - 1}' : '0';
@@ -393,6 +419,12 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
     }
   }
 
+  /// Sorts the [widget.elements] according the groups. If
+  /// [widget.groupComparator] is defined, it is used for sorting otherwise the
+  /// natural ordering of [widget.groupBy] is used for sorting.
+  ///
+  /// The elements inside a group are sorted accoring to [widget.itemComparator]
+  /// or their natural order.
   List<T> _sortElements() {
     var elements = [...widget.elements];
     if (widget.sort && elements.isNotEmpty) {
@@ -400,13 +432,11 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
         int? compareResult;
         // compare groups
         if (widget.groupComparator != null) {
-          compareResult =
-              widget.groupComparator!(widget.groupBy(e1), widget.groupBy(e2));
+          compareResult = widget.groupComparator!(widget.groupBy(e1), widget.groupBy(e2));
         } else if (widget.groupBy(e1) is Comparable) {
-          compareResult = (widget.groupBy(e1) as Comparable)
-              .compareTo(widget.groupBy(e2) as Comparable);
-          if(widget.groupSorting != null){
-            compareResult = widget.groupSorting!(e1,e2);
+          compareResult = (widget.groupBy(e1) as Comparable).compareTo(widget.groupBy(e2) as Comparable);
+          if (widget.groupSorting != null) {
+            compareResult = widget.groupSorting!(e1, e2);
           }
         }
         // compare elements inside group
@@ -422,13 +452,19 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
       if (widget.order == GroupedListOrder.DESC) {
         elements = elements.reversed.toList();
       }
-      if(widget.prioritizeGroup != null){
+      if (widget.prioritizeGroup != null) {
         elements = widget.prioritizeGroup!(elements);
       }
     }
     return elements;
   }
 
+  /// Returns the group header [Widget] for the given [topElementIndex].
+  ///
+  /// If the option [widget.useStickyGroupSeparators] is set to `true` a
+  /// [Container] with the group header [Widget] is returned.
+  ///
+  ///  Otherwise an empty [Widget] in form of [SizedBox.shrink] is returned.
   Widget _showFixedGroupHeader(int topElementIndex) {
     _groupHeaderKey = GlobalKey();
     if (widget.useStickyGroupSeparators && _sortedElements.isNotEmpty) {
@@ -442,20 +478,23 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
 
       return Container(
         key: _groupHeaderKey,
-        color:
-            widget.floatingHeader ? null : widget.stickyHeaderBackgroundColor,
+        color: widget.floatingHeader ? null : widget.stickyHeaderBackgroundColor,
         width: widget.floatingHeader ? null : MediaQuery.of(context).size.width,
         child: _buildGroupSeparator(topElement),
       );
     }
-    return Container();
+    return const SizedBox.shrink();
   }
 
+  /// Checks if the list item with the given [key] is currently rendered in the
+  /// view frame.
   bool _isListItemRendered(GlobalKey<State<StatefulWidget>> key) {
-    return key.currentContext != null &&
-        key.currentContext!.findRenderObject() != null;
+    return key.currentContext != null && key.currentContext!.findRenderObject() != null;
   }
 
+  /// Returns the group header [Widget] for an [element] based on
+  /// [widget.groupHeaderBuilder] or if null on the
+  /// [widget.groupSeparatorBuilder].
   Widget _buildGroupSeparator(T element) {
     if (widget.groupHeaderBuilder == null) {
       return widget.groupSeparatorBuilder!(widget.groupBy(element));
