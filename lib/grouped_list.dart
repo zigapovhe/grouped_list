@@ -210,8 +210,8 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// the scroll position changes drastically.
   final double? itemExtent;
 
-  /// Widget to be placed at the bottom of the list.
-  final Widget? footer;
+  /// Called at the end of each group.
+  final Widget Function(T element)? groupFooterBuilder;
 
   /// Creates a [GroupedListView].
   /// This constructor requires that [elements] and [groupBy] are provieded.
@@ -222,46 +222,46 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// Additionally at least one of [itemBuilder] or [indexedItemBuilder] and one
   /// of [groupSeparatorBuilder] or [groupHeaderBuilder] must be provieded.
 
-  const GroupedListView({
-    Key? key,
-    required this.elements,
-    required this.groupBy,
-    this.prioritizeGroup,
-    this.groupComparator,
-    this.groupSorting,
-    this.groupSeparatorBuilder,
-    this.groupHeaderBuilder,
-    this.groupStickyHeaderBuilder,
-    this.emptyPlaceholder,
-    this.itemBuilder,
-    this.indexedItemBuilder,
-    this.interdependentItemBuilder,
-    this.itemComparator,
-    this.order = GroupedListOrder.ASC,
-    this.sort = true,
-    this.useStickyGroupSeparators = false,
-    this.separator = const SizedBox.shrink(),
-    this.floatingHeader = false,
-    this.stickyHeaderBackgroundColor = const Color(0xffF7F7F7),
-    this.scrollDirection = Axis.vertical,
-    this.controller,
-    this.primary,
-    this.physics,
-    this.shrinkWrap = false,
-    this.padding,
-    this.reverse = false,
-    this.addAutomaticKeepAlives = true,
-    this.addRepaintBoundaries = true,
-    this.addSemanticIndexes = true,
-    this.cacheExtent,
-    this.clipBehavior = Clip.hardEdge,
-    this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
-    this.dragStartBehavior = DragStartBehavior.start,
-    this.restorationId,
-    this.semanticChildCount,
-    this.itemExtent,
-    this.footer,
-  })  : assert(itemBuilder != null || indexedItemBuilder != null || interdependentItemBuilder != null),
+  const GroupedListView(
+      {Key? key,
+      required this.elements,
+      required this.groupBy,
+      this.prioritizeGroup,
+      this.groupComparator,
+      this.groupSorting,
+      this.groupSeparatorBuilder,
+      this.groupHeaderBuilder,
+      this.groupStickyHeaderBuilder,
+      this.emptyPlaceholder,
+      this.itemBuilder,
+      this.indexedItemBuilder,
+      this.interdependentItemBuilder,
+      this.itemComparator,
+      this.order = GroupedListOrder.ASC,
+      this.sort = true,
+      this.useStickyGroupSeparators = false,
+      this.separator = const SizedBox.shrink(),
+      this.floatingHeader = false,
+      this.stickyHeaderBackgroundColor = const Color(0xffF7F7F7),
+      this.scrollDirection = Axis.vertical,
+      this.controller,
+      this.primary,
+      this.physics,
+      this.shrinkWrap = false,
+      this.padding,
+      this.reverse = false,
+      this.addAutomaticKeepAlives = true,
+      this.addRepaintBoundaries = true,
+      this.addSemanticIndexes = true,
+      this.cacheExtent,
+      this.clipBehavior = Clip.hardEdge,
+      this.keyboardDismissBehavior = ScrollViewKeyboardDismissBehavior.manual,
+      this.dragStartBehavior = DragStartBehavior.start,
+      this.restorationId,
+      this.semanticChildCount,
+      this.itemExtent,
+      this.groupFooterBuilder})
+      : assert(itemBuilder != null || indexedItemBuilder != null || interdependentItemBuilder != null),
         assert(groupSeparatorBuilder != null || groupHeaderBuilder != null),
         super(key: key);
 
@@ -327,9 +327,6 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
     /// If the [index] points to an separator and the previous and next items
     /// are in different groups, a group header widget is displayed.
     Widget itemBuilder(context, index) {
-      if (widget.footer != null && index == _sortedElements.length * 2) {
-        return widget.footer!;
-      }
       var actualIndex = index ~/ 2;
       if (index == hiddenIndex) {
         return Opacity(
@@ -337,14 +334,27 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
           child: _buildGroupSeparator(_sortedElements[actualIndex]),
         );
       }
+      var curr = widget.groupBy(_sortedElements[actualIndex]);
       if (isSeparator(index)) {
-        var curr = widget.groupBy(_sortedElements[actualIndex]);
         var prev = widget.groupBy(_sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
         if (prev != curr) {
           return _buildGroupSeparator(_sortedElements[actualIndex]);
         }
         return widget.separator;
       }
+
+      var next;
+      if (_sortedElements.length != 1 && _sortedElements.length > actualIndex + 1) {
+        next = widget.groupBy(_sortedElements[actualIndex + (widget.reverse ? -1 : 1)]);
+      }
+
+      if (widget.groupFooterBuilder != null &&
+          ((curr != next && next != null) || _sortedElements.length - 1 == actualIndex)) {
+        return Column(
+          children: [_buildItem(context, actualIndex), widget.groupFooterBuilder!(_sortedElements[actualIndex])],
+        );
+      }
+
       return _buildItem(context, actualIndex);
     }
 
@@ -366,7 +376,7 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
           restorationId: widget.restorationId,
           keyboardDismissBehavior: widget.keyboardDismissBehavior,
           semanticChildCount: widget.semanticChildCount,
-          itemCount: widget.footer == null ? _sortedElements.length * 2 : (_sortedElements.length * 2) + 1,
+          itemCount: _sortedElements.length * 2,
           addAutomaticKeepAlives: widget.addAutomaticKeepAlives,
           addRepaintBoundaries: widget.addRepaintBoundaries,
           addSemanticIndexes: widget.addSemanticIndexes,
