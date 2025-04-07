@@ -73,7 +73,7 @@ class GroupedListView<T, E> extends StatefulWidget {
 
   /// Called to build children for the list with
   /// 0 <= element, index < elements.length
-  final Widget Function(BuildContext context, T element, int index)? indexedItemBuilder;
+  final Widget Function(BuildContext context, T element, int index, int groupedIndex)? indexedItemBuilder;
 
   /// This widget is displayed if the list is contains no [elements] and thus is
   /// empty.
@@ -312,6 +312,8 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
       });
     }
 
+    final Map<dynamic, int> groupItemCount = {}; // Cache for counting items per group
+
     /// The itemBuilder function for this package divides the [index] by two
     /// because between each element a separator is displayed. Depending on the
     /// direction of the list and if the [index] is even or odd either a item or
@@ -321,20 +323,27 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
     /// are in different groups, a group header widget is displayed.
     Widget itemBuilder(context, index) {
       var actualIndex = index ~/ 2;
+
       if (index == hiddenIndex) {
         return Opacity(
           opacity: widget.useStickyGroupSeparators ? 0 : 1,
           child: _buildGroupSeparator(_sortedElements[actualIndex]),
         );
       }
-      var curr = widget.groupBy(_sortedElements[actualIndex]);
+
+      var currGroup = widget.groupBy(_sortedElements[actualIndex]);
+
       if (isSeparator(index)) {
-        var prev = widget.groupBy(_sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
-        if (prev != curr) {
+        var prevGroup = widget.groupBy(_sortedElements[actualIndex + (widget.reverse ? 1 : -1)]);
+        if (prevGroup != currGroup) {
           return _buildGroupSeparator(_sortedElements[actualIndex]);
         }
         return widget.separator;
       }
+
+      // Calculate grouped index
+      groupItemCount[currGroup] = (groupItemCount[currGroup] ?? 0) + 1;
+      int groupedIndex = groupItemCount[currGroup]! - 1;
 
       var next;
       if (_sortedElements.length != 1 && _sortedElements.length > actualIndex + 1) {
@@ -342,13 +351,16 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
       }
 
       if (widget.groupFooterBuilder != null &&
-          ((curr != next && next != null) || _sortedElements.length - 1 == actualIndex)) {
+          ((currGroup != next && next != null) || _sortedElements.length - 1 == actualIndex)) {
         return Column(
-          children: [_buildItem(context, actualIndex), widget.groupFooterBuilder!(_sortedElements[actualIndex])],
+          children: [
+            _buildItem(context, actualIndex, groupedIndex), // updated
+            widget.groupFooterBuilder!(_sortedElements[actualIndex]),
+          ],
         );
       }
 
-      return _buildItem(context, actualIndex);
+      return _buildItem(context, actualIndex, groupedIndex); // updated
     }
 
     return Stack(
@@ -392,10 +404,10 @@ class _GroupedListViewState<T, E> extends State<GroupedListView<T, E>> {
   /// Returns the widget for element positioned at [index]. The widget is
   /// retrieved either by [widget.indexedItemBuilder], [widget.itemBuilder]
   /// or [widget.interdependentItemBuilder].
-  Widget _buildItem(context, int index) => KeyedSubtree(
+  Widget _buildItem(context, int index, int groupedIndex) => KeyedSubtree(
         key: _keys.putIfAbsent('$index', () => GlobalKey()),
         child: widget.indexedItemBuilder != null
-            ? widget.indexedItemBuilder!(context, _sortedElements[index], index)
+            ? widget.indexedItemBuilder!(context, _sortedElements[index], index, groupedIndex)
             : widget.interdependentItemBuilder != null
                 ? widget.interdependentItemBuilder!(
                     context,
