@@ -217,7 +217,7 @@ class GroupedListView<T, E> extends StatefulWidget {
   /// of [groupSeparatorBuilder] or [groupHeaderBuilder] must be provieded.
 
   const GroupedListView(
-      {Key? key,
+      {super.key,
       required this.elements,
       required this.groupBy,
       this.prioritizeGroup,
@@ -255,8 +255,7 @@ class GroupedListView<T, E> extends StatefulWidget {
       this.itemExtent,
       this.groupFooterBuilder})
       : assert(itemBuilder != null || indexedItemBuilder != null || interdependentItemBuilder != null),
-        assert(groupSeparatorBuilder != null || groupHeaderBuilder != null),
-        super(key: key);
+        assert(groupSeparatorBuilder != null || groupHeaderBuilder != null);
 
   @override
   State<StatefulWidget> createState() => _GroupedListViewState<T, E>();

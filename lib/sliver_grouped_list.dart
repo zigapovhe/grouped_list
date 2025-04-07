@@ -68,7 +68,7 @@ class SliverGroupedListView<T, E> extends StatefulWidget {
 
   /// Creates a [SliverGroupedListView]
   const SliverGroupedListView({
-    Key? key,
+    super.key,
     required this.elements,
     required this.groupBy,
     this.groupComparator,
@@ -82,8 +82,7 @@ class SliverGroupedListView<T, E> extends StatefulWidget {
     this.separator = const SizedBox.shrink(),
     this.footer,
   })  : assert(itemBuilder != null || indexedItemBuilder != null),
-        assert(groupSeparatorBuilder != null || groupHeaderBuilder != null),
-        super(key: key);
+        assert(groupSeparatorBuilder != null || groupHeaderBuilder != null);
 
   @override
   State<StatefulWidget> createState() => _SliverGroupedListViewState<T, E>();
